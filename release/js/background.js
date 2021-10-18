@@ -101,14 +101,12 @@ function getPointsData(callback) {
                 }
             }
         };
-        console.log(xhr)
         xhr.send();
     }
 }
 
 //检查积分接口数据结构
 function checkScoreAPI(res) {
-    console.log(res)
     if (res.hasOwnProperty("data") && res.data) {
         if (res.data.hasOwnProperty("dayScoreDtos")) {
             let pass = 0;

@@ -54,10 +54,13 @@ let channel = {
 function getPointsData(callback) {
     if (scoreTabId) {
         let xhr = new XMLHttpRequest();
+        let error_max = 5;
+        let error_count = 0;
         xhr.open("GET", urlMap.scoreApi);
         xhr.setRequestHeader("Pragma", "no-cache");
-        xhr.onreadystatechange = function () {
+        xhr.onreadystatechange = function () {            
             if (xhr.readyState === 4 && xhr.status === 200) {
+                console.log("第" + (error_count +1) +"次开始获取积分数据")
                 let res = JSON.parse(xhr.responseText);
                 if (res.hasOwnProperty("code") && parseInt(res.code) === 200) {
                     if (checkScoreAPI(res)) {
@@ -78,7 +81,14 @@ function getPointsData(callback) {
                             callback(res.data);
                         }
                     } else {
-                        notice(chrome.i18n.getMessage("extScoreApi"), chrome.i18n.getMessage("extUpdate"));
+                        if(error_count>error_max) notice(chrome.i18n.getMessage("extScoreApi"), chrome.i18n.getMessage("extUpdate"));
+                        setTimeout(function(){
+                            console.log("Error：第" + error_count +"次重试获取积分数据")
+                            xhr.open("GET", urlMap.scoreApi);
+                            xhr.setRequestHeader("Pragma", "no-cache");
+                            xhr.send();
+                        },1000)                        
+                        error_count++
                     }
                 } else {
                     if (runningTabId) {
@@ -91,13 +101,15 @@ function getPointsData(callback) {
                 }
             }
         };
+        console.log(xhr)
         xhr.send();
     }
 }
 
 //检查积分接口数据结构
 function checkScoreAPI(res) {
-    if (res.hasOwnProperty("data")) {
+    console.log(res)
+    if (res.hasOwnProperty("data") && res.data) {
         if (res.data.hasOwnProperty("dayScoreDtos")) {
             let pass = 0;
             let ruleList = [1, 2, 9, 1002, 1003];

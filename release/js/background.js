@@ -8,7 +8,7 @@ let isMobile = !!(/Mobile/.exec(navigator.userAgent));
 let urlMap = {
     "index": "https://www.xuexi.cn",
     "points": "https://pc.xuexi.cn/points/my-points.html",
-    "scoreApi": "https://pc-api.xuexi.cn/open/api/score/today/queryrate",
+    "scoreApi": "https://pc-proxy-api.xuexi.cn/api/score/days/listScoreProgress?sence=score&deviceType=2",
     "channelApi": "https://www.xuexi.cn/lgdata/"
 };
 let channel = {
@@ -54,7 +54,7 @@ let channel = {
 function getPointsData(callback) {
     if (scoreTabId) {
         let xhr = new XMLHttpRequest();
-        let error_max = 5;
+        let error_max = 0;
         let error_count = 0;
         xhr.open("GET", urlMap.scoreApi);
         xhr.setRequestHeader("Pragma", "no-cache");
@@ -64,16 +64,8 @@ function getPointsData(callback) {
                 let res = JSON.parse(xhr.responseText);
                 if (res.hasOwnProperty("code") && parseInt(res.code) === 200) {
                     if (checkScoreAPI(res)) {
-                        let points = 0;
-                        let ruleList = [1, 2, 9, 1002, 1003];
-                        for (let key in res.data.dayScoreDtos) {
-                            if (!res.data.dayScoreDtos.hasOwnProperty(key)) {
-                                continue;
-                            }
-                            if (ruleList.indexOf(res.data.dayScoreDtos[key].ruleId) !== -1) {
-                                points += res.data.dayScoreDtos[key].currentScore;
-                            }
-                        }
+                        let points = res.data.totalScore;
+                        console.log(points)
                         if (!isMobile) {
                             chrome.browserAction.setBadgeText({"text": points.toString()});
                         }
@@ -81,14 +73,17 @@ function getPointsData(callback) {
                             callback(res.data);
                         }
                     } else {
-                        if(error_count>error_max) notice(chrome.i18n.getMessage("extScoreApi"), chrome.i18n.getMessage("extUpdate"));
-                        setTimeout(function(){
-                            console.log("Error：第" + error_count +"次重试获取积分数据")
-                            xhr.open("GET", urlMap.scoreApi);
-                            xhr.setRequestHeader("Pragma", "no-cache");
-                            xhr.send();
-                        },1000)                        
-                        error_count++
+                        if(error_count>error_max){
+                            notice(chrome.i18n.getMessage("extScoreApi"), chrome.i18n.getMessage("extUpdate"));
+                        } else {
+                            setTimeout(function(){
+                                console.log("Error：第" + error_count +"次重试获取积分数据")
+                                xhr.open("GET", urlMap.scoreApi);
+                                xhr.setRequestHeader("Pragma", "no-cache");
+                                xhr.send();
+                            },1000)                        
+                            error_count++
+                        }
                     }
                 } else {
                     if (runningTabId) {
@@ -108,17 +103,19 @@ function getPointsData(callback) {
 //检查积分接口数据结构
 function checkScoreAPI(res) {
     if (res.hasOwnProperty("data") && res.data) {
-        if (res.data.hasOwnProperty("dayScoreDtos")) {
+        if (res.data.hasOwnProperty("taskProgress")) {
             let pass = 0;
             let ruleList = [1, 2, 9, 1002, 1003];
-            for (let key in res.data.dayScoreDtos) {
-                if (!res.data.dayScoreDtos.hasOwnProperty(key)) {
+            for (let key in res.data.taskProgress) {
+                if (!res.data.taskProgress.hasOwnProperty(key)) {
                     continue;
                 }
-                if (res.data.dayScoreDtos[key].hasOwnProperty("ruleId") && res.data.dayScoreDtos[key].hasOwnProperty("currentScore") && res.data.dayScoreDtos[key].hasOwnProperty("dayMaxScore")) {
-                    if (ruleList.indexOf(res.data.dayScoreDtos[key].ruleId) !== -1) {
-                        ++pass;
-                    }
+                if (res.data.taskProgress[key].hasOwnProperty("taskCode") && res.data.taskProgress[key].hasOwnProperty("currentScore") && res.data.taskProgress[key].hasOwnProperty("dayMaxScore")) {
+                    res.data.taskProgress[key].taskCode.forEach(e => {
+                        if (ruleList.indexOf(parseInt(e)) !== -1) {
+                            ++pass;
+                        }
+                    });                    
                 }
             }
             if (pass === 5) {
@@ -210,34 +207,36 @@ function autoEarnPoints(timeout) {
     let newTime = 0;
     setTimeout(function () {
         getPointsData(function (data) {
-            let score = data.dayScoreDtos;
+            let score = data.taskProgress;
             let type;
 
             for (let key in score) {
                 if (!score.hasOwnProperty(key)) {
                     continue;
                 }
-                switch (score[key].ruleId) {
-                    case 1:
-                    case 1002:
-                        if (score[key].currentScore < score[key].dayMaxScore) {
-                            type = "article";
-                            newTime = 35 * 1000 + Math.floor(Math.random() * 150 * 1000);
-                        }
-                        break;
-                    case 2:
-                    case 1003:
-                        if (score[key].currentScore < score[key].dayMaxScore) {
-                            type = "video";
-                            newTime = 125 * 1000 + Math.floor(Math.random() * 120 * 1000);
-                        }
-                        break;
-                }
+                score[key].taskCode.forEach(e => {
+                    switch (parseInt(e)) {
+                        case 1:
+                        case 1002:
+                            if (score[key].currentScore < score[key].dayMaxScore) {
+                                type = "article";
+                                newTime = 35 * 1000 + Math.floor(Math.random() * 150 * 1000);                                
+                            }
+                            break;
+                        case 2:
+                        case 1003:
+                            if (score[key].currentScore < score[key].dayMaxScore) {
+                                type = "video";
+                                newTime = 125 * 1000 + Math.floor(Math.random() * 120 * 1000);
+                            }
+                            break;
+                    }
+                });                    
+                
                 if (type) {
                     break;
                 }
             }
-
             if (type && channelUrls[type].length) {
                 url = channelUrls[type].shift();
             }
